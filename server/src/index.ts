@@ -6,6 +6,7 @@ import express from "express";
 import { createServer } from "node:http";
 import { Server } from "socket.io";
 import { GameManager } from "./game.ts";
+import { startMovieShowRefresh } from "./mediaWords.ts";
 import type { Stroke } from "../../shared/types.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -108,7 +109,7 @@ io.on("connection", (socket) => {
     },
   );
 
-  socket.on("updateSettings", (payload: { roundSeconds?: number; totalRounds?: number }) => {
+  socket.on("updateSettings", (payload: Partial<import("../../shared/types.ts").GameSettings>) => {
     const seat = games.socketToSeat.get(socket.id);
     if (!seat) return;
     const room = games.getRoom(seat.code);
@@ -243,4 +244,5 @@ io.on("connection", (socket) => {
 
 httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`Sketchinary server on :${PORT}`);
+  startMovieShowRefresh();
 });

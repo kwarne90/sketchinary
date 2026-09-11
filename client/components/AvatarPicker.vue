@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import {
+  AVATAR_EXPRESSIONS,
+  AVATAR_EYES,
   AVATAR_HATS,
   AVATAR_PALETTE,
   AVATAR_UTENSILS,
   decodeAvatar,
   encodeAvatar,
+  type AvatarExpression,
+  type AvatarEyes,
   type AvatarHat,
   type AvatarLook,
   type AvatarUtensil,
@@ -55,8 +59,13 @@ function setUtensil(utensil: AvatarUtensil) {
   commit();
 }
 
-function toggle<K extends "wink" | "glasses" | "blush" | "openMouth">(key: K) {
-  look[key] = !look[key];
+function setEyes(eyes: AvatarEyes) {
+  look.eyes = eyes;
+  commit();
+}
+
+function setExpression(expression: AvatarExpression) {
+  look.expression = expression;
   commit();
 }
 
@@ -92,12 +101,14 @@ function onKey(event: KeyboardEvent) {
 onMounted(() => window.addEventListener("keydown", onKey));
 onUnmounted(() => window.removeEventListener("keydown", onKey));
 
-const hatLabel: Record<AvatarHat, string> = {
+const hatLabel: Record<Exclude<AvatarHat, "cap">, string> = {
   none: "None",
-  beanie: "Hat",
+  beanie: "Beanie",
   headphones: "Cans",
   bow: "Bow",
+  flower: "Flower",
 };
+const accessoryOptions = AVATAR_HATS.filter((hat): hat is Exclude<AvatarHat, "cap"> => hat !== "cap");
 
 const utensilLabel: Record<AvatarUtensil, string> = {
   pencil: "Pencil",
@@ -109,6 +120,24 @@ const utensilLabel: Record<AvatarUtensil, string> = {
   marker: "Marker",
   brush: "Brush",
 };
+const eyeLabel: Record<AvatarEyes, string> = {
+  none: "None",
+  glasses: "Glasses",
+  shades: "Shades",
+  goggles: "Goggles",
+};
+const expressionLabel: Record<AvatarExpression, string> = {
+  happy: "Happy",
+  nervous: "Nervous",
+  dizzy: "Dizzy",
+  surprised: "Surprised",
+  confused: "Confused",
+  smug: "Smug",
+};
+
+function chipOn(on: boolean) {
+  return on ? "bg-coral text-white" : "bg-ink/5 text-ink hover:bg-ink/10";
+}
 </script>
 
 <template>
@@ -117,109 +146,116 @@ const utensilLabel: Record<AvatarUtensil, string> = {
     @click.self="close"
   >
     <div
-      class="w-full max-w-sm rounded-[2rem] bg-paper p-5 shadow-chunk"
-      style="max-height: min(90vh, 640px); overflow-y: auto"
+      class="w-full max-w-sm max-h-[90vh] overflow-y-auto rounded-[2rem] bg-paper p-5 shadow-chunk sm:max-w-lg md:max-h-none md:max-w-3xl md:overflow-visible md:p-7"
     >
-      <p class="text-center text-sm font-semibold uppercase tracking-[0.18em] text-coral">
-        Your look
-      </p>
-      <div class="relative mx-auto my-3 w-[88px]">
-        <BlobAvatar :name="draftName || name" :avatar="encodeAvatar(look)" :size="88" />
-        <SketcherTool :utensil="look.utensil" placed />
-      </div>
+      <div class="md:grid md:grid-cols-[16rem_1fr] md:items-stretch md:gap-x-8">
+        <div class="flex flex-col items-center rounded-[1.6rem] bg-cream px-4 py-5 md:justify-center">
+          <p class="text-sm font-semibold uppercase tracking-[0.18em] text-coral">
+            Your look
+          </p>
+          <div class="relative my-5 w-[120px]">
+            <BlobAvatar :name="draftName || name" :avatar="encodeAvatar(look)" :size="120" />
+            <SketcherTool :utensil="look.utensil" :size="28" placed animate />
+          </div>
 
-      <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/50">Name</p>
-      <input
-        v-model="draftName"
-        maxlength="16"
-        autocomplete="nickname"
-        class="mb-4 w-full rounded-full border-4 border-ink/10 bg-cream px-4 py-2.5 text-center text-lg font-medium outline-none placeholder:text-ink/30 focus:border-coral"
-        @blur="commitName"
-        @keydown.enter.prevent="commitName"
-      />
-      <p v-if="nameError" class="-mt-3 mb-3 text-center text-sm text-coral">{{ nameError }}</p>
+          <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/50">Name</p>
+          <input
+            v-model="draftName"
+            maxlength="16"
+            autocomplete="nickname"
+            class="w-full rounded-full border-4 border-ink/10 bg-paper px-4 py-2.5 text-center text-lg font-medium outline-none placeholder:text-ink/30 focus:border-coral"
+            @blur="commitName"
+            @keydown.enter.prevent="commitName"
+          />
+          <p v-if="nameError" class="mt-2 text-center text-sm text-coral">{{ nameError }}</p>
+        </div>
 
-      <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/50">Color</p>
-      <div class="mb-4 flex flex-wrap justify-center gap-2">
-        <button
-          v-for="(swatch, index) in AVATAR_PALETTE"
-          :key="swatch"
-          type="button"
-          class="h-8 w-8 rounded-full border-[3px]"
-          :class="look.color === index ? 'border-ink' : 'border-transparent'"
-          :style="{ background: swatch }"
-          @click="setColor(index)"
-        />
-      </div>
+        <div class="mt-5 space-y-3.5 md:mt-0 md:flex md:flex-col md:justify-center">
+          <div class="flex items-start gap-3">
+            <p class="mt-2 w-[4.75rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-ink/50">Color</p>
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="(swatch, index) in AVATAR_PALETTE"
+                :key="swatch"
+                type="button"
+                class="h-8 w-8 rounded-full border-[3px] transition"
+                :class="look.color === index ? 'border-ink' : 'border-transparent hover:border-ink/20'"
+                :style="{ background: swatch }"
+                @click="setColor(index)"
+              />
+            </div>
+          </div>
 
-      <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/50">Hat</p>
-      <div class="mb-4 flex flex-wrap gap-1">
-        <button
-          v-for="hat in AVATAR_HATS"
-          :key="hat"
-          type="button"
-          class="rounded-full px-3 py-1.5 text-sm font-semibold"
-          :class="look.hat === hat ? 'bg-coral text-white' : 'bg-ink/5 text-ink'"
-          @click="setHat(hat)"
-        >
-          {{ hatLabel[hat] }}
-        </button>
-      </div>
+          <div class="flex items-start gap-3">
+            <p class="mt-2 w-[4.75rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-ink/50">Accessory</p>
+            <div class="flex flex-wrap gap-1.5">
+              <button
+                v-for="hat in accessoryOptions"
+                :key="hat"
+                type="button"
+                class="rounded-full px-3 py-1.5 text-sm font-semibold transition"
+                :class="chipOn(look.hat === hat)"
+                @click="setHat(hat)"
+              >
+                {{ hatLabel[hat] }}
+              </button>
+            </div>
+          </div>
 
-      <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/50">Tool</p>
-      <div class="mb-4 flex flex-wrap gap-1">
-        <button
-          v-for="tool in AVATAR_UTENSILS"
-          :key="tool"
-          type="button"
-          class="flex items-center gap-1 rounded-full py-1 pl-1 pr-3 text-sm font-semibold"
-          :class="look.utensil === tool ? 'bg-coral text-white' : 'bg-ink/5 text-ink'"
-          @click="setUtensil(tool)"
-        >
-          <SketcherTool :utensil="tool" :size="20" />
-          {{ utensilLabel[tool] }}
-        </button>
-      </div>
+          <div class="flex items-start gap-3">
+            <p class="mt-2 w-[4.75rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-ink/50">Eyes</p>
+            <div class="flex flex-wrap gap-1.5">
+              <button
+                v-for="eyes in AVATAR_EYES"
+                :key="eyes"
+                type="button"
+                class="rounded-full px-3 py-1.5 text-sm font-semibold transition"
+                :class="chipOn(look.eyes === eyes)"
+                @click="setEyes(eyes)"
+              >
+                {{ eyeLabel[eyes] }}
+              </button>
+            </div>
+          </div>
 
-      <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/50">Face</p>
-      <div class="mb-5 flex flex-wrap gap-1">
-        <button
-          type="button"
-          class="rounded-full px-3 py-1.5 text-sm font-semibold"
-          :class="look.wink ? 'bg-coral text-white' : 'bg-ink/5 text-ink'"
-          @click="toggle('wink')"
-        >
-          Wink
-        </button>
-        <button
-          type="button"
-          class="rounded-full px-3 py-1.5 text-sm font-semibold"
-          :class="look.glasses ? 'bg-coral text-white' : 'bg-ink/5 text-ink'"
-          @click="toggle('glasses')"
-        >
-          Glasses
-        </button>
-        <button
-          type="button"
-          class="rounded-full px-3 py-1.5 text-sm font-semibold"
-          :class="look.blush ? 'bg-coral text-white' : 'bg-ink/5 text-ink'"
-          @click="toggle('blush')"
-        >
-          Blush
-        </button>
-        <button
-          type="button"
-          class="rounded-full px-3 py-1.5 text-sm font-semibold"
-          :class="look.openMouth ? 'bg-coral text-white' : 'bg-ink/5 text-ink'"
-          @click="toggle('openMouth')"
-        >
-          Grin
-        </button>
+          <div class="flex items-start gap-3">
+            <p class="mt-2 w-[4.75rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-ink/50">Expression</p>
+            <div class="grid grid-cols-3 gap-1.5">
+              <button
+                v-for="expression in AVATAR_EXPRESSIONS"
+                :key="expression"
+                type="button"
+                class="rounded-full px-3 py-1.5 text-sm font-semibold transition"
+                :class="chipOn(look.expression === expression)"
+                @click="setExpression(expression)"
+              >
+                {{ expressionLabel[expression] }}
+              </button>
+            </div>
+          </div>
+
+          <div class="flex items-start gap-3">
+            <p class="mt-2 w-[4.75rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-ink/50">Tool</p>
+            <div class="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+              <button
+                v-for="tool in AVATAR_UTENSILS"
+                :key="tool"
+                type="button"
+                class="flex items-center justify-center gap-1 rounded-full py-1.5 pl-1 pr-2 text-sm font-semibold transition"
+                :class="chipOn(look.utensil === tool)"
+                @click="setUtensil(tool)"
+              >
+                <SketcherTool :utensil="tool" :size="20" />
+                {{ utensilLabel[tool] }}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <button
         type="button"
-        class="w-full rounded-full bg-coral py-3 text-lg font-semibold text-white shadow-chunk"
+        class="mt-6 w-full rounded-full bg-coral py-3 text-lg font-semibold text-white shadow-chunk transition hover:-translate-y-0.5"
         @click="close"
       >
         Done

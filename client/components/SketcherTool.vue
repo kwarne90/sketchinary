@@ -38,9 +38,9 @@ defineProps<{
       </template>
 
       <template v-else-if="utensil === 'fry'">
-        <rect x="8.6" y="3" width="4.8" height="16" rx="2" fill="#FFB347" stroke="#3D2B27" stroke-width="1.4" />
-        <rect x="8.6" y="3" width="4.8" height="4" rx="2" fill="#FF6B5B" stroke="#3D2B27" stroke-width="1.4" />
-        <path d="M10 8 V16.5 M12 8.5 V16" stroke="#E89B2D" stroke-width="0.8" stroke-linecap="round" />
+        <rect x="8.7" y="2.6" width="4.6" height="16.8" rx="0.55" fill="#FFB347" stroke="#3D2B27" stroke-width="1.4" />
+        <rect x="8.7" y="16.2" width="4.6" height="3.2" rx="0.45" fill="#E0892A" stroke="#3D2B27" stroke-width="1.4" />
+        <path d="M10.1 4.4 V15.4 M11.9 5 V15.6" stroke="#E0892A" stroke-width="0.7" stroke-linecap="round" />
       </template>
 
       <template v-else-if="utensil === 'pen'">
@@ -84,7 +84,6 @@ defineProps<{
           stroke-width="1.3"
           stroke-linejoin="round"
         />
-        <path d="M11 16.2 L11 20.4" stroke="#3D2B27" stroke-width="1.2" stroke-linecap="round" />
       </template>
     </g>
   </svg>

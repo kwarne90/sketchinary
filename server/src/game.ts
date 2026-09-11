@@ -11,15 +11,19 @@ import type {
 import {
   DEFAULT_SETTINGS,
   EMOTE_KINDS,
+  ROTATION_MODES,
   ROUND_SECONDS_OPTIONS,
   TOTAL_ROUNDS_OPTIONS,
+  WORD_SETS,
   avatarFromName,
   clampAvatar,
+  pointsForGuess,
 } from "../../shared/types.ts";
 import { pickWord } from "./words.ts";
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-const REVEAL_MS = 3200;
+const REVEAL_MS = 2800;
+const GUESS_REVEAL_MS = 6800;
 const EMPTY_ROOM_TTL_MS = 5 * 60 * 1000;
 
 export interface Room {
@@ -36,6 +40,7 @@ export interface Room {
   guesses: Guess[];
   usedWords: string[];
   revealReason: RevealReason;
+  guesserId: string | null;
   winnerId: string | null;
   roundTimer: ReturnType<typeof setTimeout> | null;
   revealTimer: ReturnType<typeof setTimeout> | null;
@@ -110,6 +115,7 @@ export class GameManager {
       guesses: [],
       usedWords: [],
       revealReason: null,
+      guesserId: null,
       winnerId: null,
       roundTimer: null,
       revealTimer: null,
@@ -242,16 +248,22 @@ export class GameManager {
     if (room.hostId !== playerId) return "Only the host can change settings";
     const prevSeconds = room.settings.roundSeconds;
     if (
-      settings.roundSeconds &&
+      typeof settings.roundSeconds === "number" &&
       (ROUND_SECONDS_OPTIONS as readonly number[]).includes(settings.roundSeconds)
     ) {
       room.settings.roundSeconds = settings.roundSeconds;
     }
     if (
-      settings.totalRounds &&
+      typeof settings.totalRounds === "number" &&
       (TOTAL_ROUNDS_OPTIONS as readonly number[]).includes(settings.totalRounds)
     ) {
       room.settings.totalRounds = settings.totalRounds;
+    }
+    if (settings.wordSet && (WORD_SETS as readonly string[]).includes(settings.wordSet)) {
+      room.settings.wordSet = settings.wordSet;
+    }
+    if (settings.rotation && (ROTATION_MODES as readonly string[]).includes(settings.rotation)) {
+      room.settings.rotation = settings.rotation;
     }
     if (
       room.phase === "drawing" &&
@@ -292,6 +304,7 @@ export class GameManager {
     room.guesses = [];
     room.usedWords = [];
     room.revealReason = null;
+    room.guesserId = null;
     room.winnerId = null;
     this.broadcast(room);
   }
@@ -365,9 +378,10 @@ export class GameManager {
     if (room.guesses.length > 40) room.guesses.splice(0, room.guesses.length - 40);
     this.onGuess(room.code, guess);
     if (correct) {
-      player.score += 2;
+      const pts = pointsForGuess(room.players.filter((p) => p.connected).length);
+      player.score += pts.guesser;
       const sketcher = room.players.find((p) => p.id === room.sketcherId);
-      if (sketcher) sketcher.score += 1;
+      if (sketcher) sketcher.score += pts.sketcher;
       this.beginReveal(room, "guess", playerId);
     }
   }
@@ -380,7 +394,7 @@ export class GameManager {
     return {
       code: room.code,
       hostId: room.hostId,
-      settings: room.settings,
+      settings: { ...DEFAULT_SETTINGS, ...room.settings },
       players: room.players.map((p) => ({ ...p })),
       phase: room.phase,
       roundIndex: room.roundIndex,
@@ -391,6 +405,7 @@ export class GameManager {
       guesses: room.guesses.slice(-12),
       you: playerId,
       revealReason: room.revealReason,
+      guesserId: room.guesserId,
       winnerId: room.winnerId,
       now: Date.now(),
     };
@@ -419,12 +434,13 @@ export class GameManager {
     room.roundIndex += 1;
     room.phase = "drawing";
     room.sketcherId = sketcher.id;
-    room.word = pickWord(room.usedWords);
+    room.word = pickWord(room.usedWords, room.settings.wordSet ?? "basic");
     room.usedWords.push(room.word);
     room.endsAt = Date.now() + room.settings.roundSeconds * 1000;
     room.strokes = [];
     room.guesses = [];
     room.revealReason = null;
+    room.guesserId = null;
     room.winnerId = null;
     this.armRoundTimer(room);
     this.broadcast(room);
@@ -457,18 +473,21 @@ export class GameManager {
     clearTimers(room);
     room.phase = "reveal";
     room.revealReason = reason;
+    room.guesserId = reason === "guess" ? nextSketcherId ?? null : null;
     room.endsAt = null;
     this.broadcast(room);
     room.revealTimer = setTimeout(() => {
       if (this.rooms.get(room.code) !== room) return;
-      if (room.roundIndex >= room.settings.totalRounds) {
+      if (room.settings.totalRounds > 0 && room.roundIndex >= room.settings.totalRounds) {
         this.endGame(room);
         return;
       }
       const forced =
-        reason === "guess" && nextSketcherId ? nextSketcherId : null;
+        room.settings.rotation !== "random" && reason === "guess" && nextSketcherId
+          ? nextSketcherId
+          : null;
       this.beginRound(room, forced);
-    }, REVEAL_MS);
+    }, reason === "guess" ? GUESS_REVEAL_MS : REVEAL_MS);
   }
 
   private endGame(room: Room) {
@@ -486,6 +505,11 @@ export class GameManager {
     if (forcedId) {
       const forced = connected.find((p) => p.id === forcedId);
       if (forced) return forced;
+    }
+    if (room.settings.rotation === "random") {
+      const pool = connected.filter((p) => p.id !== room.sketcherId);
+      const source = pool.length ? pool : connected;
+      return source[Math.floor(Math.random() * source.length)];
     }
     const notYet = connected.filter(
       (p) => p.sketchCount === 0 && p.id !== room.sketcherId,

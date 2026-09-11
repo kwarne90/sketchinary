@@ -3,12 +3,42 @@ const model = defineModel<string>({ required: true });
 const emit = defineEmits<{
   submit: [];
 }>();
+
+const COOLDOWN_MS = 2000;
+const cooldownUntil = ref(0);
+const now = ref(Date.now());
+
+const remaining = computed(() => Math.max(0, cooldownUntil.value - now.value));
+const cooling = computed(() => remaining.value > 0);
+const cooldownLabel = computed(() => {
+  const ms = remaining.value;
+  if (ms <= 0) return "";
+  const n = ms > 1000 ? 2 : ms > 250 ? 1 : 0;
+  return `:${String(n).padStart(2, "0")}`;
+});
+
+function submit() {
+  if (cooling.value) return;
+  if (!model.value.trim()) return;
+  emit("submit");
+  cooldownUntil.value = Date.now() + COOLDOWN_MS;
+}
+
+let tick: number | undefined;
+onMounted(() => {
+  tick = window.setInterval(() => {
+    now.value = Date.now();
+  }, 80);
+});
+onUnmounted(() => {
+  if (tick) clearInterval(tick);
+});
 </script>
 
 <template>
   <form
     class="flex w-full gap-2 md:w-[min(92vw,520px)]"
-    @submit.prevent="emit('submit')"
+    @submit.prevent="submit"
   >
     <input
       v-model="model"
@@ -18,9 +48,16 @@ const emit = defineEmits<{
     />
     <button
       type="submit"
-      class="rounded-full bg-coral px-5 py-3 font-semibold text-white shadow-chunk"
+      class="relative min-w-[4.75rem] rounded-full bg-coral px-5 py-3 font-semibold text-white shadow-chunk disabled:cursor-not-allowed"
+      :disabled="cooling"
     >
-      Send
+      <span :class="cooling ? 'opacity-0' : ''">Send</span>
+      <span
+        v-if="cooling"
+        class="absolute inset-0 flex items-center justify-center tabular-nums"
+      >
+        {{ cooldownLabel }}
+      </span>
     </button>
   </form>
 </template>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 const route = useRoute();
 const code = computed(() => String(route.params.code || "").toUpperCase());
-const { state, error, liveGuesses, join, start, playAgain, updateSettings, strokeStart, strokeAdd, undo, clear, guess } =
+const { state, error, liveGuesses, liveEmotes, join, start, playAgain, updateSettings, setAvatar, poke, strokeStart, strokeAdd, undo, clear, guess } =
   useGame();
 
 const needsName = ref(!loadSession()?.name);
@@ -53,10 +53,13 @@ onMounted(async () => {
       v-else-if="state"
       :state="state"
       :live-guesses="liveGuesses"
+      :live-emotes="liveEmotes"
       :share-url="shareUrl"
       @start="start"
       @play-again="playAgain"
       @update-settings="updateSettings"
+      @set-avatar="setAvatar"
+      @poke="poke"
       @stroke-start="strokeStart"
       @stroke-add="(id, points) => strokeAdd(id, points)"
       @undo="undo"

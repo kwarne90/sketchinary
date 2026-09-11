@@ -1,5 +1,6 @@
 import type {
   ClientSnapshot,
+  Emote,
   GameSettings,
   Guess,
   Phase,
@@ -9,8 +10,11 @@ import type {
 } from "../../shared/types.ts";
 import {
   DEFAULT_SETTINGS,
+  EMOTE_KINDS,
   ROUND_SECONDS_OPTIONS,
   TOTAL_ROUNDS_OPTIONS,
+  avatarFromName,
+  clampAvatar,
 } from "../../shared/types.ts";
 import { pickWord } from "./words.ts";
 
@@ -46,14 +50,6 @@ function randomCode(): string {
   return code;
 }
 
-export function avatarFromName(name: string): number {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-  }
-  return hash % 8;
-}
-
 export function normalizeGuess(value: string): string {
   return value
     .toLowerCase()
@@ -78,6 +74,8 @@ export class GameManager {
   socketToSeat = new Map<string, { code: string; playerId: string }>();
   onBroadcast: (code: string) => void = () => {};
   onGuess: (code: string, guess: Guess) => void = () => {};
+  onEmote: (code: string, emote: Emote) => void = () => {};
+  private lastPokeAt = new Map<string, number>();
 
   private uniqueCode(): string {
     for (let i = 0; i < 20; i++) {
@@ -87,13 +85,13 @@ export class GameManager {
     return randomCode() + randomCode();
   }
 
-  createRoom(playerId: string, name: string): Room {
+  createRoom(playerId: string, name: string, avatar?: number): Room {
     const trimmed = name.trim().slice(0, 16);
     const code = this.uniqueCode();
     const player: Player = {
       id: playerId,
       name: trimmed,
-      avatar: avatarFromName(trimmed),
+      avatar: Number.isFinite(avatar) ? clampAvatar(avatar as number) : avatarFromName(trimmed),
       score: 0,
       sketchCount: 0,
       connected: true,
@@ -133,6 +131,7 @@ export class GameManager {
     code: string,
     playerId: string,
     name: string,
+    avatar?: number,
   ): { room: Room; error?: string } {
     const room = this.getRoom(code);
     if (!room) return { room: undefined as unknown as Room, error: "Game not found" };
@@ -140,11 +139,17 @@ export class GameManager {
     const trimmed = name.trim().slice(0, 16);
     if (!trimmed) return { room, error: "Pick a name" };
 
+    const nextAvatar = Number.isFinite(avatar) ? clampAvatar(avatar as number) : undefined;
     const existing = room.players.find((p) => p.id === playerId);
     if (existing) {
       existing.connected = true;
-      existing.name = trimmed;
-      existing.avatar = avatarFromName(trimmed);
+      if (trimmed.toLowerCase() !== existing.name.toLowerCase()) {
+        if (room.players.some((p) => p.id !== playerId && p.name.toLowerCase() === trimmed.toLowerCase())) {
+          return { room, error: "That name is taken" };
+        }
+        existing.name = trimmed;
+      }
+      if (nextAvatar !== undefined) existing.avatar = nextAvatar;
       this.clearEmptyTimer(room);
       return { room };
     }
@@ -156,7 +161,7 @@ export class GameManager {
     room.players.push({
       id: playerId,
       name: trimmed,
-      avatar: avatarFromName(trimmed),
+      avatar: nextAvatar ?? avatarFromName(trimmed),
       score: 0,
       sketchCount: 0,
       connected: true,
@@ -193,13 +198,49 @@ export class GameManager {
     }
   }
 
+  setAvatar(room: Room, playerId: string, avatar: number) {
+    const player = room.players.find((p) => p.id === playerId);
+    if (!player) return;
+    player.avatar = clampAvatar(avatar);
+    this.broadcast(room);
+  }
+
+  setName(room: Room, playerId: string, name: string): string | undefined {
+    const trimmed = name.trim().slice(0, 16);
+    if (!trimmed) return "Pick a name";
+    const player = room.players.find((p) => p.id === playerId);
+    if (!player) return;
+    if (trimmed.toLowerCase() === player.name.toLowerCase()) {
+      player.name = trimmed;
+      this.broadcast(room);
+      return;
+    }
+    if (room.players.some((p) => p.id !== playerId && p.name.toLowerCase() === trimmed.toLowerCase())) {
+      return "That name is taken";
+    }
+    player.name = trimmed;
+    this.broadcast(room);
+  }
+
+  poke(room: Room, fromId: string, toId: string) {
+    if (!fromId || fromId === toId) return;
+    const from = room.players.find((p) => p.id === fromId);
+    const to = room.players.find((p) => p.id === toId);
+    if (!from || !to) return;
+    const now = Date.now();
+    if ((this.lastPokeAt.get(fromId) || 0) > now - 650) return;
+    this.lastPokeAt.set(fromId, now);
+    const kind = EMOTE_KINDS[Math.floor(Math.random() * EMOTE_KINDS.length)];
+    this.onEmote(room.code, { fromId, toId, kind, at: now });
+  }
+
   updateSettings(
     room: Room,
     playerId: string,
     settings: Partial<GameSettings>,
   ): string | undefined {
     if (room.hostId !== playerId) return "Only the host can change settings";
-    if (room.phase !== "lobby") return "Settings are locked once the game starts";
+    const prevSeconds = room.settings.roundSeconds;
     if (
       settings.roundSeconds &&
       (ROUND_SECONDS_OPTIONS as readonly number[]).includes(settings.roundSeconds)
@@ -211,6 +252,19 @@ export class GameManager {
       (TOTAL_ROUNDS_OPTIONS as readonly number[]).includes(settings.totalRounds)
     ) {
       room.settings.totalRounds = settings.totalRounds;
+    }
+    if (
+      room.phase === "drawing" &&
+      room.endsAt &&
+      room.settings.roundSeconds !== prevSeconds
+    ) {
+      const startedAt = room.endsAt - prevSeconds * 1000;
+      room.endsAt = startedAt + room.settings.roundSeconds * 1000;
+      if (room.endsAt <= Date.now()) {
+        this.beginReveal(room, "timeout");
+        return;
+      }
+      this.armRoundTimer(room);
     }
     this.broadcast(room);
   }
@@ -372,12 +426,26 @@ export class GameManager {
     room.guesses = [];
     room.revealReason = null;
     room.winnerId = null;
+    this.armRoundTimer(room);
+    this.broadcast(room);
+  }
+
+  private armRoundTimer(room: Room) {
+    if (room.roundTimer) {
+      clearTimeout(room.roundTimer);
+      room.roundTimer = null;
+    }
+    if (room.phase !== "drawing" || !room.endsAt) return;
+    const remaining = room.endsAt - Date.now();
+    if (remaining <= 0) {
+      this.beginReveal(room, "timeout");
+      return;
+    }
     room.roundTimer = setTimeout(() => {
       if (this.rooms.get(room.code) === room && room.phase === "drawing") {
         this.beginReveal(room, "timeout");
       }
-    }, room.settings.roundSeconds * 1000);
-    this.broadcast(room);
+    }, remaining);
   }
 
   private beginReveal(

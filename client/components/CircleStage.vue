@@ -5,12 +5,14 @@ import {
   STROKE_WIDTHS,
   TOTAL_ROUNDS_OPTIONS,
   type ClientSnapshot,
+  type Emote,
   type Guess,
 } from "#shared";
 
 const props = defineProps<{
   state: ClientSnapshot;
   liveGuesses: Guess[];
+  liveEmotes: Emote[];
   shareUrl: string;
 }>();
 
@@ -23,14 +25,19 @@ const emit = defineEmits<{
   undo: [];
   clear: [];
   guess: [text: string];
+  setAvatar: [avatar: number];
+  poke: [toId: string];
 }>();
 
-const circle = ref(320);
+const board = ref(320);
+const isMobile = ref(false);
 const color = ref<(typeof DRAW_COLORS)[number]>(DRAW_COLORS[0]);
 const width = ref<(typeof STROKE_WIDTHS)[number]>(8);
 const mode = ref<"draw" | "erase">("draw");
 const guess = ref("");
 const remaining = ref(0);
+const settingsOpen = ref(false);
+const pickerOpen = ref(false);
 
 const isHost = computed(() => props.state.hostId === props.state.you);
 const isSketcher = computed(
@@ -50,11 +57,20 @@ const ranked = computed(() =>
 const sketcher = computed(() =>
   props.state.players.find((p) => p.id === props.state.sketcherId),
 );
+const me = computed(() =>
+  props.state.players.find((p) => p.id === props.state.you),
+);
+const allGuesses = computed(() => [...props.state.guesses, ...props.liveGuesses]);
 
 function measure() {
   const w = window.innerWidth;
   const h = window.innerHeight;
-  circle.value = Math.round(Math.min(w, h) * 0.65);
+  isMobile.value = w < 768;
+  if (isMobile.value) {
+    board.value = Math.round(Math.min(w - 20, h * 0.5, 420));
+  } else {
+    board.value = Math.round(Math.min(w, h) * 0.58);
+  }
 }
 
 function tick() {
@@ -78,85 +94,125 @@ function submitGuess() {
   guess.value = "";
 }
 
+function onKey(event: KeyboardEvent) {
+  if (!(event.metaKey || event.ctrlKey)) return;
+  if (event.key.toLowerCase() !== "z" || event.shiftKey) return;
+  const target = event.target as HTMLElement | null;
+  if (target?.closest("input, textarea, select, [contenteditable]")) return;
+  if (!isSketcher.value) return;
+  event.preventDefault();
+  emit("undo");
+}
+
 let interval: number | undefined;
 onMounted(() => {
   measure();
   tick();
   window.addEventListener("resize", measure);
+  window.addEventListener("keydown", onKey);
   interval = window.setInterval(tick, 200);
 });
 onUnmounted(() => {
   window.removeEventListener("resize", measure);
+  window.removeEventListener("keydown", onKey);
   if (interval) clearInterval(interval);
 });
 watch(() => props.state.endsAt, tick);
 </script>
 
 <template>
-  <div class="relative h-full">
-    <header class="pointer-events-auto absolute left-4 top-4 z-20 flex items-center gap-2">
-      <p class="rounded-full bg-paper px-3 py-1 text-sm font-semibold shadow-bubble">
-        {{ state.code }}
-      </p>
-      <ShareButton :url="shareUrl" />
+  <div class="relative flex h-full flex-col md:block">
+    <header
+      class="pointer-events-auto z-30 flex items-center justify-between gap-2 px-3 pb-1 pt-[max(10px,env(safe-area-inset-top))] md:absolute md:left-4 md:right-4 md:top-4 md:px-0 md:pt-0"
+    >
+      <div class="flex items-center gap-2">
+        <p class="rounded-full bg-paper px-3 py-1 text-sm font-semibold shadow-bubble">
+          {{ state.code }}
+        </p>
+        <ShareButton :url="shareUrl" />
+      </div>
+      <div class="relative flex flex-col items-end gap-1">
+        <button
+          v-if="isHost && state.phase !== 'lobby'"
+          type="button"
+          class="rounded-full bg-paper px-3 py-1 text-xs font-semibold shadow-bubble sm:text-sm"
+          @click="settingsOpen = !settingsOpen"
+        >
+          {{ state.settings.roundSeconds / 60 }}m · {{ state.settings.totalRounds }} rounds
+        </button>
+        <p
+          v-else-if="!(state.phase === 'lobby' && isHost)"
+          class="rounded-full bg-paper px-3 py-1 text-xs font-semibold shadow-bubble sm:text-sm"
+        >
+          {{ state.settings.roundSeconds / 60 }}m · {{ state.settings.totalRounds }} rounds
+        </p>
+        <div
+          v-if="isHost && (state.phase === 'lobby' || settingsOpen)"
+          class="flex flex-col items-end gap-1"
+        >
+          <div class="flex gap-1 rounded-full bg-paper p-1 shadow-bubble">
+            <button
+              v-for="seconds in ROUND_SECONDS_OPTIONS"
+              :key="seconds"
+              class="rounded-full px-2 py-1 text-xs font-semibold sm:px-3 sm:text-sm"
+              :class="state.settings.roundSeconds === seconds ? 'bg-coral text-white' : 'text-ink'"
+              @click="emit('updateSettings', { roundSeconds: seconds })"
+            >
+              {{ seconds / 60 }}m
+            </button>
+          </div>
+          <div class="flex gap-1 rounded-full bg-paper p-1 shadow-bubble">
+            <button
+              v-for="rounds in TOTAL_ROUNDS_OPTIONS"
+              :key="rounds"
+              class="rounded-full px-2 py-1 text-xs font-semibold sm:px-3 sm:text-sm"
+              :class="state.settings.totalRounds === rounds ? 'bg-coral text-white' : 'text-ink'"
+              @click="emit('updateSettings', { totalRounds: rounds })"
+            >
+              {{ rounds }} rds
+            </button>
+          </div>
+        </div>
+      </div>
     </header>
 
-    <div
-      v-if="state.phase === 'lobby' && isHost"
-      class="absolute right-4 top-4 z-20 flex flex-col items-end gap-2"
-    >
-      <div class="flex gap-1 rounded-full bg-paper p-1 shadow-bubble">
-        <button
-          v-for="seconds in ROUND_SECONDS_OPTIONS"
-          :key="seconds"
-          class="rounded-full px-3 py-1 text-sm font-semibold"
-          :class="
-            state.settings.roundSeconds === seconds
-              ? 'bg-coral text-white'
-              : 'text-ink'
-          "
-          @click="emit('updateSettings', { roundSeconds: seconds })"
-        >
-          {{ seconds / 60 }}m
-        </button>
-      </div>
-      <div class="flex gap-1 rounded-full bg-paper p-1 shadow-bubble">
-        <button
-          v-for="rounds in TOTAL_ROUNDS_OPTIONS"
-          :key="rounds"
-          class="rounded-full px-3 py-1 text-sm font-semibold"
-          :class="
-            state.settings.totalRounds === rounds
-              ? 'bg-coral text-white'
-              : 'text-ink'
-          "
-          @click="emit('updateSettings', { totalRounds: rounds })"
-        >
-          {{ rounds }} rds
-        </button>
-      </div>
+    <div v-if="isMobile" class="relative z-10 h-[132px] shrink-0">
+      <AvatarOrbit
+        mode="huddle"
+        :players="state.players"
+        :guesses="allGuesses"
+        :emotes="liveEmotes"
+        :sketcher-id="state.sketcherId"
+        :host-id="state.hostId"
+        :you-id="state.you"
+        :board="board"
+        @edit="pickerOpen = true"
+        @poke="emit('poke', $event)"
+      />
     </div>
 
-    <p
-      v-else
-      class="absolute right-4 top-4 z-20 rounded-full bg-paper px-3 py-1 text-sm font-semibold shadow-bubble"
+    <div
+      class="relative flex min-h-0 flex-1 items-center justify-center px-2 md:absolute md:inset-0 md:px-0"
     >
-      {{ state.settings.roundSeconds / 60 }}m · {{ state.settings.totalRounds }} rounds
-    </p>
-
-    <div class="absolute inset-0 flex items-center justify-center">
       <AvatarOrbit
+        v-if="!isMobile"
+        mode="wander"
         :players="state.players"
-        :radius="circle / 2"
-        :guesses="[...state.guesses, ...liveGuesses]"
+        :guesses="allGuesses"
+        :emotes="liveEmotes"
         :sketcher-id="state.sketcherId"
+        :host-id="state.hostId"
+        :you-id="state.you"
+        :board="board"
+        @edit="pickerOpen = true"
+        @poke="emit('poke', $event)"
       />
 
       <div
         class="relative"
-        :style="{ width: `${circle}px`, height: `${circle}px` }"
+        :style="{ width: `${board}px`, height: `${board}px` }"
       >
-        <div class="absolute inset-0 overflow-hidden rounded-full bg-paper shadow-chunk">
+        <div class="absolute inset-0 overflow-hidden rounded-[2rem] bg-paper shadow-chunk md:rounded-[2.6rem]">
           <SketchCanvas
             v-if="state.phase === 'drawing' || state.phase === 'reveal'"
             :strokes="state.strokes"
@@ -173,7 +229,7 @@ watch(() => props.state.endsAt, tick);
             class="absolute inset-0 flex flex-col items-center justify-center gap-3 p-8 text-center"
           >
             <p class="text-ink/60">
-              {{ connectedCount }} player{{ connectedCount === 1 ? "" : "s" }} in the circle
+              {{ connectedCount }} player{{ connectedCount === 1 ? "" : "s" }} here
             </p>
             <button
               class="rounded-full bg-coral px-10 py-4 text-3xl font-semibold text-white shadow-chunk hover:-translate-y-0.5 disabled:opacity-40"
@@ -242,53 +298,32 @@ watch(() => props.state.endsAt, tick);
         >
           {{ sketcher?.name }} is sketching
         </div>
-
-        <div
-          v-if="isSketcher"
-          class="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full bg-paper p-1.5 shadow-bubble"
-        >
-          <button
-            v-for="swatch in DRAW_COLORS"
-            :key="swatch"
-            class="h-7 w-7 rounded-full border-2"
-            :class="color === swatch && mode === 'draw' ? 'border-ink' : 'border-transparent'"
-            :style="{ background: swatch }"
-            @click="((color = swatch), (mode = 'draw'))"
-          />
-          <button
-            v-for="size in STROKE_WIDTHS"
-            :key="size"
-            class="flex h-7 w-7 items-center justify-center rounded-full"
-            :class="width === size ? 'bg-cream' : ''"
-            @click="width = size"
-          >
-            <span
-              class="rounded-full bg-ink"
-              :style="{ width: `${size}px`, height: `${size}px` }"
-            />
-          </button>
-          <button
-            class="rounded-full px-2 py-1 text-xs font-semibold"
-            :class="mode === 'erase' ? 'bg-cream' : ''"
-            @click="mode = mode === 'erase' ? 'draw' : 'erase'"
-          >
-            Erase
-          </button>
-          <button class="rounded-full px-2 py-1 text-xs font-semibold" @click="emit('undo')">
-            Undo
-          </button>
-          <button class="rounded-full px-2 py-1 text-xs font-semibold" @click="emit('clear')">
-            Clear
-          </button>
-        </div>
       </div>
     </div>
 
     <div
-      v-if="state.phase === 'drawing' && !isSketcher"
-      class="absolute bottom-8 left-1/2 z-20 -translate-x-1/2"
+      class="z-20 shrink-0 px-3 pt-2 pb-[max(10px,env(safe-area-inset-bottom))] md:absolute md:bottom-7 md:left-1/2 md:w-auto md:-translate-x-1/2 md:px-0 md:pt-0"
     >
-      <GuessBar v-model="guess" @submit="submitGuess" />
+      <ToolDock
+        v-if="isSketcher"
+        v-model:color="color"
+        v-model:width="width"
+        v-model:mode="mode"
+        @undo="emit('undo')"
+        @clear="emit('clear')"
+      />
+      <GuessBar
+        v-else-if="state.phase === 'drawing'"
+        v-model="guess"
+        @submit="submitGuess"
+      />
     </div>
+    <AvatarPicker
+      v-if="pickerOpen && me"
+      :name="me.name"
+      :avatar="me.avatar"
+      @update="emit('setAvatar', $event)"
+      @close="pickerOpen = false"
+    />
   </div>
 </template>

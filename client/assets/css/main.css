@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#__nuxt {
+  height: 100%;
+  margin: 0;
+  background: #f8edd8;
+  color: #3d2b27;
+  font-family: Fredoka, system-ui, sans-serif;
+}
+
+body {
+  background-image:
+    radial-gradient(circle at 18% 12%, rgba(255, 107, 91, 0.12), transparent 28%),
+    radial-gradient(circle at 88% 18%, rgba(62, 207, 207, 0.14), transparent 26%),
+    radial-gradient(circle at 80% 88%, rgba(139, 124, 255, 0.12), transparent 24%);
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+button {
+  font-family: inherit;
+}

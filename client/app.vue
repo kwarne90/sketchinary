@@ -1,5 +1,6 @@
 <template>
-  <div class="h-full font-display">
-    <NuxtPage />
+  <div class="relative h-full overflow-hidden font-display">
+    <BrandLogo />
+    <NuxtPage :transition="{ name: 'scene' }" />
   </div>
 </template>

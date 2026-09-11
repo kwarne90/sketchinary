@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Eraser, Trash, Undo2 } from "@lucide/vue";
 import { DRAW_COLORS, STROKE_WIDTHS } from "#shared";
 
 const color = defineModel<(typeof DRAW_COLORS)[number]>("color", {
@@ -49,17 +50,29 @@ defineEmits<{
       />
     </button>
     <button
-      class="rounded-full px-2 py-1 text-xs font-semibold sm:px-3"
-      :class="mode === 'erase' ? 'bg-cream' : ''"
+      class="ml-0.5 flex h-9 w-9 items-center justify-center rounded-full md:h-10 md:w-10"
+      :class="mode === 'erase' ? 'bg-cream text-coral' : 'text-ink'"
+      aria-label="Erase"
+      title="Erase"
       @click="mode = mode === 'erase' ? 'draw' : 'erase'"
     >
-      Erase
+      <Eraser :size="18" :stroke-width="2.4" />
     </button>
-    <button class="rounded-full px-2 py-1 text-xs font-semibold sm:px-3" @click="$emit('undo')">
-      Undo
+    <button
+      class="flex h-9 w-9 items-center justify-center rounded-full text-ink md:h-10 md:w-10"
+      aria-label="Undo"
+      title="Undo"
+      @click="$emit('undo')"
+    >
+      <Undo2 :size="18" :stroke-width="2.4" />
     </button>
-    <button class="rounded-full px-2 py-1 text-xs font-semibold sm:px-3" @click="$emit('clear')">
-      Clear
+    <button
+      class="flex h-9 w-9 items-center justify-center rounded-full text-ink md:h-10 md:w-10"
+      aria-label="Clear"
+      title="Clear"
+      @click="$emit('clear')"
+    >
+      <Trash :size="18" :stroke-width="2.4" />
     </button>
   </div>
 </template>

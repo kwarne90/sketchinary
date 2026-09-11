@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { Check, Link2 } from "@lucide/vue";
+
 const props = defineProps<{
   url: string;
 }>();
@@ -21,9 +23,12 @@ async function copy() {
 <template>
   <button
     type="button"
-    class="rounded-full bg-paper px-4 py-2 text-sm font-semibold shadow-bubble hover:-translate-y-0.5"
+    class="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-paper text-ink shadow-bubble hover:-translate-y-0.5"
+    :aria-label="copied ? 'Copied' : 'Copy link'"
+    :title="copied ? 'Copied' : 'Copy link'"
     @click="copy"
   >
-    {{ copied ? "Copied!" : "Copy link" }}
+    <Check v-if="copied" :size="18" :stroke-width="2.4" class="text-coral" />
+    <Link2 v-else :size="18" :stroke-width="2.4" />
   </button>
 </template>

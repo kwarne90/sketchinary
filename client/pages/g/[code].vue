@@ -12,8 +12,13 @@ const shareUrl = computed(() =>
 
 async function enter(name: string) {
   pending.value = true;
+  const started = Date.now();
   try {
     await join(code.value, name);
+    await Promise.all([
+      afterGateDelay(started),
+      whenTrue(() => !!state.value),
+    ]);
     needsName.value = false;
   } finally {
     pending.value = false;
@@ -33,41 +38,46 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="h-full">
-    <NameGate
-      v-if="needsName"
-      button="Join game"
-      :pending="pending"
-      @submit="enter"
-    />
-    <div
-      v-else-if="error && !state"
-      class="flex h-full flex-col items-center justify-center gap-4 px-6 text-center"
-    >
-      <p class="text-2xl font-semibold">{{ error }}</p>
-      <NuxtLink to="/" class="rounded-full bg-coral px-6 py-3 font-semibold text-white shadow-chunk">
-        Back home
-      </NuxtLink>
-    </div>
-    <CircleStage
-      v-else-if="state"
-      :state="state"
-      :live-guesses="liveGuesses"
-      :live-emotes="liveEmotes"
-      :share-url="shareUrl"
-      @start="start"
-      @play-again="playAgain"
-      @update-settings="updateSettings"
-      @set-avatar="setAvatar"
-      @poke="poke"
-      @stroke-start="strokeStart"
-      @stroke-add="(id, points) => strokeAdd(id, points)"
-      @undo="undo"
-      @clear="clear"
-      @guess="guess"
-    />
-    <div v-else class="flex h-full items-center justify-center text-ink/50">
-      Hopping in...
-    </div>
+  <div class="relative h-full">
+    <Transition name="scene">
+      <NameGate
+        v-if="needsName"
+        key="gate"
+        button="Join game"
+        :pending="pending"
+        @submit="enter"
+      />
+      <div
+        v-else-if="error && !state"
+        key="error"
+        class="flex h-full flex-col items-center justify-center gap-4 px-6 text-center"
+      >
+        <p class="text-2xl font-semibold">{{ error }}</p>
+        <NuxtLink to="/" class="rounded-full bg-coral px-6 py-3 font-semibold text-white shadow-chunk">
+          Back home
+        </NuxtLink>
+      </div>
+      <CircleStage
+        v-else-if="state"
+        key="stage"
+        :state="state"
+        :live-guesses="liveGuesses"
+        :live-emotes="liveEmotes"
+        :share-url="shareUrl"
+        @start="start"
+        @play-again="playAgain"
+        @update-settings="updateSettings"
+        @set-avatar="setAvatar"
+        @poke="poke"
+        @stroke-start="strokeStart"
+        @stroke-add="(id, points) => strokeAdd(id, points)"
+        @undo="undo"
+        @clear="clear"
+        @guess="guess"
+      />
+      <div v-else key="wait" class="flex h-full items-center justify-center text-ink/50">
+        Hopping in...
+      </div>
+    </Transition>
   </div>
 </template>

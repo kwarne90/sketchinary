@@ -1,4 +1,7 @@
-export const WORDS = [
+import type { WordSet } from "../../shared/types.ts";
+import { getMovieShowWords } from "./mediaWords.ts";
+
+export const BASIC_WORDS = [
   "airplane",
   "alligator",
   "anchor",
@@ -303,8 +306,255 @@ export const WORDS = [
   "zipper",
 ];
 
-export function pickWord(used: string[]): string {
-  const pool = WORDS.filter((word) => !used.includes(word));
-  const source = pool.length > 0 ? pool : WORDS;
+export const DISNEY_WORDS = [
+  "Aladdin",
+  "Anna",
+  "Ariel",
+  "Bambi",
+  "Baymax",
+  "Beast",
+  "Belle",
+  "Buzz Lightyear",
+  "Cinderella",
+  "Cruella",
+  "Donald Duck",
+  "Dory",
+  "Dumbo",
+  "Elsa",
+  "Flounder",
+  "Frozen",
+  "Genie",
+  "Goofy",
+  "Hades",
+  "Heihei",
+  "Hercules",
+  "Jack Sparrow",
+  "Jafar",
+  "Jasmine",
+  "Kristoff",
+  "Lightning McQueen",
+  "Maleficent",
+  "Maui",
+  "Mickey Mouse",
+  "Mike Wazowski",
+  "Minnie Mouse",
+  "Moana",
+  "Mulan",
+  "Nala",
+  "Nemo",
+  "Olaf",
+  "Pascal",
+  "Peter Pan",
+  "Pinocchio",
+  "Pluto",
+  "Pocahontas",
+  "Pua",
+  "Pumbaa",
+  "Rapunzel",
+  "Scar",
+  "Simba",
+  "Stitch",
+  "Sulley",
+  "Sven",
+  "Tangled",
+  "Tiana",
+  "Timon",
+  "Tinker Bell",
+  "Ursula",
+  "Wall-E",
+  "Woody",
+];
+
+export const HARD_WORDS = [
+  "algorithm",
+  "anxiety",
+  "black hole",
+  "brain freeze",
+  "buffering",
+  "capitalism",
+  "clickbait",
+  "cliffhanger",
+  "cold shoulder",
+  "conscience",
+  "deja vu",
+  "democracy",
+  "echo chamber",
+  "hangover",
+  "homesick",
+  "inflation",
+  "intern",
+  "irony",
+  "jet lag",
+  "midlife crisis",
+  "muscle memory",
+  "paradox",
+  "password",
+  "peer pressure",
+  "photosynthesis",
+  "plot twist",
+  "procrastination",
+  "sarcasm",
+  "social distancing",
+  "spam",
+  "time travel",
+  "tip of the tongue",
+  "unread email",
+  "white lie",
+  "wifi",
+  "writer's block",
+  "awkward silence",
+  "brain fog",
+  "culture shock",
+  "double take",
+  "guilty pleasure",
+  "inner child",
+  "out of office",
+  "plot hole",
+  "red herring",
+  "silent treatment",
+  "small talk",
+  "stage fright",
+  "sunk cost",
+  "the cloud",
+];
+
+export const ANIMAL_WORDS = [
+  "alligator",
+  "ant",
+  "armadillo",
+  "bat",
+  "bear",
+  "beaver",
+  "bee",
+  "buffalo",
+  "butterfly",
+  "camel",
+  "cat",
+  "caterpillar",
+  "cheetah",
+  "chicken",
+  "chipmunk",
+  "cobra",
+  "cow",
+  "crab",
+  "crocodile",
+  "deer",
+  "dinosaur",
+  "dog",
+  "dolphin",
+  "donkey",
+  "dragon",
+  "duck",
+  "eagle",
+  "elephant",
+  "flamingo",
+  "fox",
+  "frog",
+  "giraffe",
+  "goat",
+  "goldfish",
+  "gorilla",
+  "grasshopper",
+  "hamster",
+  "hedgehog",
+  "hippo",
+  "horse",
+  "hummingbird",
+  "jellyfish",
+  "kangaroo",
+  "koala",
+  "ladybug",
+  "leopard",
+  "lion",
+  "lizard",
+  "llama",
+  "lobster",
+  "monkey",
+  "moose",
+  "mouse",
+  "narwhal",
+  "octopus",
+  "ostrich",
+  "otter",
+  "owl",
+  "panda",
+  "parrot",
+  "peacock",
+  "pelican",
+  "penguin",
+  "pig",
+  "platypus",
+  "porcupine",
+  "rabbit",
+  "raccoon",
+  "rhino",
+  "rooster",
+  "scorpion",
+  "seahorse",
+  "seal",
+  "shark",
+  "sheep",
+  "skunk",
+  "sloth",
+  "snail",
+  "snake",
+  "spider",
+  "squirrel",
+  "starfish",
+  "swan",
+  "tiger",
+  "toad",
+  "turkey",
+  "turtle",
+  "unicorn",
+  "vulture",
+  "walrus",
+  "whale",
+  "wolf",
+  "worm",
+  "zebra",
+];
+
+function uniqueWords(lists: string[][]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const list of lists) {
+    for (const word of list) {
+      const key = word.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(word);
+    }
+  }
+  return out;
+}
+
+export function wordsFor(set: WordSet): string[] {
+  switch (set) {
+    case "disney":
+      return DISNEY_WORDS;
+    case "hard":
+      return HARD_WORDS;
+    case "movies":
+      return getMovieShowWords();
+    case "animals":
+      return ANIMAL_WORDS;
+    case "combined":
+      return uniqueWords([
+        BASIC_WORDS,
+        DISNEY_WORDS,
+        HARD_WORDS,
+        ANIMAL_WORDS,
+        getMovieShowWords(),
+      ]);
+    default:
+      return BASIC_WORDS;
+  }
+}
+
+export function pickWord(used: string[], set: WordSet = "basic"): string {
+  const words = wordsFor(set);
+  const pool = words.filter((word) => !used.includes(word));
+  const source = pool.length > 0 ? pool : words;
   return source[Math.floor(Math.random() * source.length)];
 }

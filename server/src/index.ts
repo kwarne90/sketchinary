@@ -13,7 +13,7 @@ const isProd = process.env.NODE_ENV === "production";
 const PORT = Number(process.env.PORT || (isProd ? 3000 : 3001));
 
 const app = express();
-app.use(cors({ origin: isProd ? false : ["http://localhost:3000"] }));
+app.use(cors({ origin: isProd ? false : true }));
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
@@ -37,7 +37,7 @@ const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: isProd
     ? undefined
-    : { origin: "http://localhost:3000", methods: ["GET", "POST"] },
+    : { origin: true, methods: ["GET", "POST"] },
 });
 
 const games = new GameManager();
@@ -58,12 +58,15 @@ games.onGuess = (code, guess) => {
   io.to(code).emit("guess", guess);
   emitState(code);
 };
+games.onEmote = (code, emote) => {
+  io.to(code).emit("emote", emote);
+};
 
 io.on("connection", (socket) => {
   socket.on(
     "create",
     (
-      payload: { playerId?: string; name?: string },
+      payload: { playerId?: string; name?: string; avatar?: number },
       ack?: (result: { code?: string; error?: string }) => void,
     ) => {
       const playerId = String(payload?.playerId || "");
@@ -72,7 +75,7 @@ io.on("connection", (socket) => {
         ack?.({ error: "Pick a name" });
         return;
       }
-      const room = games.createRoom(playerId, name);
+      const room = games.createRoom(playerId, name, payload.avatar);
       games.attachSocket(socket.id, room.code, playerId);
       socket.join(room.code);
       ack?.({ code: room.code });
@@ -83,7 +86,7 @@ io.on("connection", (socket) => {
   socket.on(
     "join",
     (
-      payload: { code?: string; playerId?: string; name?: string },
+      payload: { code?: string; playerId?: string; name?: string; avatar?: number },
       ack?: (result: { error?: string }) => void,
     ) => {
       const code = String(payload?.code || "").toUpperCase();
@@ -93,7 +96,7 @@ io.on("connection", (socket) => {
         ack?.({ error: "Pick a name" });
         return;
       }
-      const { room, error } = games.joinRoom(code, playerId, name);
+      const { room, error } = games.joinRoom(code, playerId, name, payload.avatar);
       if (error || !room) {
         ack?.({ error: error || "Game not found" });
         return;
@@ -112,6 +115,47 @@ io.on("connection", (socket) => {
     if (!room) return;
     const error = games.updateSettings(room, seat.playerId, payload || {});
     if (error) socket.emit("errorMessage", error);
+  });
+
+  socket.on("setAvatar", (payload: { avatar?: number }) => {
+    const seat = games.socketToSeat.get(socket.id);
+    if (!seat || !Number.isFinite(payload?.avatar)) return;
+    const room = games.getRoom(seat.code);
+    if (!room) return;
+    games.setAvatar(room, seat.playerId, Number(payload.avatar));
+  });
+
+  socket.on(
+    "setName",
+    (
+      payload: { name?: string },
+      ack?: (result: { error?: string }) => void,
+    ) => {
+      const seat = games.socketToSeat.get(socket.id);
+      if (!seat) {
+        ack?.({ error: "Not in a game" });
+        return;
+      }
+      const room = games.getRoom(seat.code);
+      if (!room) {
+        ack?.({ error: "Game not found" });
+        return;
+      }
+      const error = games.setName(room, seat.playerId, String(payload?.name || ""));
+      if (error) {
+        ack?.({ error });
+        return;
+      }
+      ack?.({});
+    },
+  );
+
+  socket.on("poke", (payload: { toId?: string }) => {
+    const seat = games.socketToSeat.get(socket.id);
+    if (!seat) return;
+    const room = games.getRoom(seat.code);
+    if (!room) return;
+    games.poke(room, seat.playerId, String(payload?.toId || ""));
   });
 
   socket.on("start", () => {

@@ -1,10 +1,11 @@
-import type { ClientSnapshot, GameSettings, Guess, Stroke } from "#shared";
+import type { ClientSnapshot, Emote, GameSettings, Guess, Stroke } from "#shared";
 
 const SESSION_KEY = "sketchinary.session";
 
 export interface Session {
   playerId: string;
   name: string;
+  avatar?: number;
 }
 
 export function loadSession(): Session | null {
@@ -23,11 +24,21 @@ export function loadSession(): Session | null {
 export function saveSession(name: string): Session {
   const existing = loadSession();
   const session: Session = {
-    playerId: existing?.playerId || crypto.randomUUID(),
+    playerId: existing?.playerId || newId(),
     name: name.trim().slice(0, 16),
+    avatar: existing?.avatar,
   };
   sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
   return session;
+}
+
+export function saveAvatar(avatar: number) {
+  const existing = loadSession();
+  if (!existing) return;
+  sessionStorage.setItem(
+    SESSION_KEY,
+    JSON.stringify({ ...existing, avatar }),
+  );
 }
 
 export function useGame() {
@@ -35,6 +46,7 @@ export function useGame() {
   const state = useState<ClientSnapshot | null>("game-state", () => null);
   const error = useState<string | null>("game-error", () => null);
   const liveGuesses = useState<Guess[]>("live-guesses", () => []);
+  const liveEmotes = useState<Emote[]>("live-emotes", () => []);
 
   function ensureConnected() {
     if ($socket.connected) return Promise.resolve();
@@ -63,6 +75,7 @@ export function useGame() {
   function bind() {
     $socket.off("state");
     $socket.off("guess");
+    $socket.off("emote");
     $socket.off("stroke");
     $socket.off("errorMessage");
     $socket.off("connect");
@@ -74,6 +87,7 @@ export function useGame() {
           code: current.code,
           playerId: session.playerId,
           name: session.name,
+          avatar: session.avatar,
         });
       }
     });
@@ -85,9 +99,14 @@ export function useGame() {
       state.value = snapshot;
       error.value = null;
       liveGuesses.value = snapshot.guesses.slice(-12);
+      const me = snapshot.players.find((p) => p.id === snapshot.you);
+      if (me) saveAvatar(me.avatar);
     });
     $socket.on("guess", (guess: Guess) => {
       liveGuesses.value = [...liveGuesses.value, guess].slice(-20);
+    });
+    $socket.on("emote", (emote: Emote) => {
+      liveEmotes.value = [...liveEmotes.value, emote].slice(-12);
     });
     $socket.on(
       "stroke",
@@ -133,7 +152,7 @@ export function useGame() {
     return new Promise((resolve, reject) => {
       $socket.emit(
         "create",
-        { playerId: session.playerId, name: session.name },
+        { playerId: session.playerId, name: session.name, avatar: session.avatar },
         (result: { code?: string; error?: string }) => {
           if (result?.error || !result.code) {
             error.value = result?.error || "Could not create game";
@@ -154,7 +173,7 @@ export function useGame() {
     return new Promise((resolve, reject) => {
       $socket.emit(
         "join",
-        { code, playerId: session.playerId, name: session.name },
+        { code, playerId: session.playerId, name: session.name, avatar: session.avatar },
         (result: { error?: string }) => {
           if (result?.error) {
             error.value = result.error;
@@ -169,6 +188,60 @@ export function useGame() {
 
   function updateSettings(settings: Partial<GameSettings>) {
     $socket.emit("updateSettings", settings);
+  }
+
+  function setAvatar(avatar: number) {
+    saveAvatar(avatar);
+    const current = state.value;
+    if (current) {
+      state.value = {
+        ...current,
+        players: current.players.map((player) =>
+          player.id === current.you ? { ...player, avatar } : player,
+        ),
+      };
+    }
+    $socket.emit("setAvatar", { avatar });
+  }
+
+  function setName(name: string): Promise<void> {
+    const trimmed = name.trim().slice(0, 16);
+    if (!trimmed) return Promise.resolve();
+    const snapshot = state.value;
+    const previous = snapshot?.players.find((p) => p.id === snapshot.you)?.name;
+    if (previous === trimmed) return Promise.resolve();
+    saveSession(trimmed);
+    if (snapshot) {
+      state.value = {
+        ...snapshot,
+        players: snapshot.players.map((player) =>
+          player.id === snapshot.you ? { ...player, name: trimmed } : player,
+        ),
+      };
+    }
+    return new Promise((resolve, reject) => {
+      $socket.emit(
+        "setName",
+        { name: trimmed },
+        (result?: { error?: string }) => {
+          if (result?.error) {
+            if (previous) saveSession(previous);
+            const latest = state.value;
+            if (latest && previous) {
+              state.value = {
+                ...latest,
+                players: latest.players.map((player) =>
+                  player.id === latest.you ? { ...player, name: previous } : player,
+                ),
+              };
+            }
+            reject(new Error(result.error));
+            return;
+          }
+          resolve();
+        },
+      );
+    });
   }
 
   function start() {
@@ -203,6 +276,10 @@ export function useGame() {
   }
 
   function undo() {
+    const current = state.value;
+    if (current?.strokes.length) {
+      state.value = { ...current, strokes: current.strokes.slice(0, -1) };
+    }
     $socket.emit("undo");
   }
 
@@ -214,6 +291,10 @@ export function useGame() {
     $socket.emit("guess", { text });
   }
 
+  function poke(toId: string) {
+    $socket.emit("poke", { toId });
+  }
+
   if (import.meta.client) {
     bind();
     const session = loadSession();
@@ -222,6 +303,7 @@ export function useGame() {
         code: state.value.code,
         playerId: session.playerId,
         name: session.name,
+        avatar: session.avatar,
       });
     }
   }
@@ -230,9 +312,12 @@ export function useGame() {
     state,
     error,
     liveGuesses,
+    liveEmotes,
     create,
     join,
     updateSettings,
+    setAvatar,
+    setName,
     start,
     playAgain,
     strokeStart,
@@ -240,6 +325,7 @@ export function useGame() {
     undo,
     clear,
     guess,
+    poke,
     bind,
     ensureConnected,
   };

@@ -79,7 +79,7 @@ function onPointerDown(event: PointerEvent) {
   if (!canvas) return;
   canvas.setPointerCapture(event.pointerId);
   drawing.value = true;
-  const id = crypto.randomUUID();
+  const id = newId();
   strokeId.value = id;
   const point = pointFromEvent(event);
   pending = [];

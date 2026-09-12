@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { X } from "@lucide/vue";
 import {
   AVATAR_EXPRESSIONS,
   AVATAR_EYES,
@@ -142,12 +143,20 @@ function chipOn(on: boolean) {
 
 <template>
   <div
-    class="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-4 sm:items-center"
+    class="fixed inset-0 z-50 flex items-start justify-center bg-ink/40 px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-[max(5.5rem,calc(env(safe-area-inset-top)+3.5rem))] sm:items-center sm:py-8"
     @click.self="close"
   >
     <div
-      class="w-full max-w-sm max-h-[90vh] overflow-y-auto rounded-[2rem] bg-paper p-5 shadow-chunk sm:max-w-lg md:max-h-none md:max-w-3xl md:overflow-visible md:p-7"
+      class="relative w-full max-w-sm max-h-[calc(100svh-7.5rem)] overflow-y-auto rounded-[2rem] bg-paper p-5 pt-6 shadow-chunk sm:max-h-[min(90vh,52rem)] sm:max-w-lg md:max-h-none md:max-w-3xl md:overflow-visible md:p-7"
     >
+      <button
+        type="button"
+        class="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-cream text-ink md:right-5 md:top-5"
+        aria-label="Close"
+        @click="close"
+      >
+        <X :size="18" :stroke-width="2.4" />
+      </button>
       <div class="md:grid md:grid-cols-[16rem_1fr] md:items-stretch md:gap-x-8">
         <div class="flex flex-col items-center rounded-[1.6rem] bg-cream px-4 py-5 md:justify-center">
           <p class="text-sm font-semibold uppercase tracking-[0.18em] text-coral">

@@ -1,13 +1,9 @@
 <script setup lang="ts">
+import { SlidersHorizontal, X } from "@lucide/vue";
 import {
   DRAW_COLORS,
-  ROTATION_LABELS,
-  ROTATION_MODES,
-  ROUND_SECONDS_OPTIONS,
   STROKE_WIDTHS,
-  TOTAL_ROUNDS_OPTIONS,
   WORD_SET_LABELS,
-  WORD_SETS,
   type ClientSnapshot,
   type Emote,
   type GameSettings,
@@ -52,6 +48,12 @@ const isSketcher = computed(
   () =>
     props.state.phase === "drawing" &&
     props.state.sketcherId === props.state.you,
+);
+const showDesktopSettings = computed(
+  () => isHost.value && !isMobile.value && (props.state.phase === "lobby" || settingsOpen.value),
+);
+const showMobileSettings = computed(
+  () => isHost.value && isMobile.value && settingsOpen.value,
 );
 const connectedCount = computed(
   () => props.state.players.filter((p) => p.connected).length,
@@ -120,6 +122,10 @@ function submitGuess() {
 }
 
 function onKey(event: KeyboardEvent) {
+  if (event.key === "Escape" && settingsOpen.value) {
+    settingsOpen.value = false;
+    return;
+  }
   if (!(event.metaKey || event.ctrlKey)) return;
   if (event.key.toLowerCase() !== "z" || event.shiftKey) return;
   const target = event.target as HTMLElement | null;
@@ -161,7 +167,17 @@ watch(() => props.state.endsAt, tick);
       </div>
       <div class="pointer-events-auto relative flex flex-col items-end justify-self-end">
         <button
-          v-if="isHost && state.phase !== 'lobby'"
+          v-if="isHost && isMobile"
+          type="button"
+          class="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-paper text-ink shadow-bubble"
+          aria-label="Game settings"
+          title="Game settings"
+          @click="settingsOpen = true"
+        >
+          <SlidersHorizontal :size="18" :stroke-width="2.4" />
+        </button>
+        <button
+          v-else-if="isHost && state.phase !== 'lobby'"
           type="button"
           class="rounded-full bg-paper px-4 py-2 text-sm font-semibold shadow-bubble whitespace-nowrap"
           @click="settingsOpen = !settingsOpen"
@@ -169,73 +185,20 @@ watch(() => props.state.endsAt, tick);
           {{ settingsSummary(state.settings) }}
         </button>
         <p
-          v-else-if="!(state.phase === 'lobby' && isHost)"
-          class="whitespace-nowrap rounded-full bg-paper px-4 py-2 text-sm font-semibold shadow-bubble"
+          v-else-if="!(isHost && (state.phase === 'lobby' || isMobile))"
+          class="max-w-[7.5rem] truncate whitespace-nowrap rounded-full bg-paper px-3 py-2 text-sm font-semibold shadow-bubble md:max-w-none md:px-4"
         >
           {{ settingsSummary(state.settings) }}
         </p>
         <div
-          v-if="isHost && (state.phase === 'lobby' || settingsOpen)"
+          v-if="showDesktopSettings"
           class="w-[min(92vw,18.5rem)] rounded-[1.35rem] bg-paper p-1.5 shadow-bubble"
           :class="state.phase === 'lobby' ? '' : 'absolute right-0 top-full z-40 mt-1'"
         >
-          <div class="flex items-center gap-2 px-1.5 py-1">
-            <span class="w-12 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-ink/40">Time</span>
-            <div class="flex min-w-0 flex-1 flex-wrap justify-end gap-1">
-              <button
-                v-for="seconds in ROUND_SECONDS_OPTIONS"
-                :key="seconds"
-                class="shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold"
-                :class="state.settings.roundSeconds === seconds ? 'bg-coral text-white' : 'text-ink hover:bg-ink/5'"
-                @click="emit('updateSettings', { roundSeconds: seconds })"
-              >
-                {{ seconds / 60 }}m
-              </button>
-            </div>
-          </div>
-          <div class="flex items-center gap-2 px-1.5 py-1">
-            <span class="w-12 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-ink/40">Rounds</span>
-            <div class="flex min-w-0 flex-1 flex-wrap justify-end gap-1">
-              <button
-                v-for="rounds in TOTAL_ROUNDS_OPTIONS"
-                :key="rounds"
-                class="shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold"
-                :class="state.settings.totalRounds === rounds ? 'bg-coral text-white' : 'text-ink hover:bg-ink/5'"
-                @click="emit('updateSettings', { totalRounds: rounds })"
-              >
-                {{ rounds === 0 ? "∞" : rounds }}
-              </button>
-            </div>
-          </div>
-          <div class="flex items-start gap-2 px-1.5 py-1">
-            <span class="mt-1.5 w-12 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-ink/40">Words</span>
-            <div class="flex min-w-0 flex-1 flex-wrap justify-end gap-1">
-              <button
-                v-for="set in WORD_SETS"
-                :key="set"
-                class="shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold"
-                :class="state.settings.wordSet === set ? 'bg-coral text-white' : 'text-ink hover:bg-ink/5'"
-                :title="set === 'movies' ? 'Movies & shows' : undefined"
-                @click="emit('updateSettings', { wordSet: set })"
-              >
-                {{ WORD_SET_LABELS[set] }}
-              </button>
-            </div>
-          </div>
-          <div class="flex items-center gap-2 px-1.5 py-1">
-            <span class="w-12 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-ink/40">Next</span>
-            <div class="flex min-w-0 flex-1 flex-wrap justify-end gap-1">
-              <button
-                v-for="mode in ROTATION_MODES"
-                :key="mode"
-                class="shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold"
-                :class="state.settings.rotation === mode ? 'bg-coral text-white' : 'text-ink hover:bg-ink/5'"
-                @click="emit('updateSettings', { rotation: mode })"
-              >
-                {{ ROTATION_LABELS[mode] }}
-              </button>
-            </div>
-          </div>
+          <GameSettingsForm
+            :settings="state.settings"
+            @update="emit('updateSettings', $event)"
+          />
         </div>
       </div>
     </header>
@@ -394,5 +357,28 @@ watch(() => props.state.endsAt, tick);
       @update="emit('setAvatar', $event)"
       @close="pickerOpen = false"
     />
+    <div
+      v-if="showMobileSettings"
+      class="fixed inset-0 z-50 flex items-start justify-center bg-ink/40 px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-[max(5.5rem,calc(env(safe-area-inset-top)+3.5rem))]"
+      @click.self="settingsOpen = false"
+    >
+      <div class="relative w-full max-w-sm max-h-[calc(100svh-7.5rem)] overflow-y-auto rounded-[2rem] bg-paper p-5 pt-6 shadow-chunk">
+        <button
+          type="button"
+          class="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-cream text-ink"
+          aria-label="Close"
+          @click="settingsOpen = false"
+        >
+          <X :size="18" :stroke-width="2.4" />
+        </button>
+        <p class="mb-3 pr-12 text-sm font-semibold uppercase tracking-[0.18em] text-coral">
+          Game
+        </p>
+        <GameSettingsForm
+          :settings="state.settings"
+          @update="emit('updateSettings', $event)"
+        />
+      </div>
+    </div>
   </div>
 </template>

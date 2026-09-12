@@ -12,6 +12,9 @@ const props = defineProps<{
 
 const look = computed(() => decodeAvatar(props.avatar));
 const color = computed(() => AVATAR_PALETTE[look.value.color % AVATAR_PALETTE.length]);
+const knitClip = computed(
+  () => `beanie-knit-${props.name}-${props.avatar}`.replace(/[^a-zA-Z0-9_-]/g, ""),
+);
 </script>
 
 <template>
@@ -26,16 +29,25 @@ const color = computed(() => AVATAR_PALETTE[look.value.color % AVATAR_PALETTE.le
     <circle cx="32" cy="34" r="22" :fill="color" stroke="#3D2B27" stroke-width="2.2" />
 
     <g v-if="look.hat === 'beanie'" transform="translate(1 -4) rotate(18 40 20)">
+      <clipPath :id="knitClip">
+        <path d="M18 27 C18 5 56 5 56 27 Z" />
+      </clipPath>
       <path
         d="M18 27 C18 5 56 5 56 27 Z"
-        fill="#FF6B5B"
+        fill="#3ECFCF"
         stroke="#3D2B27"
         stroke-width="1.7"
         stroke-linejoin="round"
       />
-      <rect x="17.2" y="22.4" width="39.6" height="7.6" rx="2.6" fill="#FFF8EE" stroke="#3D2B27" stroke-width="1.6" />
-      <path d="M22 26.2 H52" stroke="#3D2B27" stroke-width="1.1" stroke-linecap="round" opacity="0.28" />
-      <circle cx="37" cy="9.2" r="4.1" fill="#FFD166" stroke="#3D2B27" stroke-width="1.5" />
+      <g :clip-path="`url(#${knitClip})`">
+        <path d="M26 12.4 Q27.2 18.5 26.6 23.4" fill="none" stroke="#3D2B27" stroke-width="1.1" stroke-linecap="butt" opacity="0.22" />
+        <path d="M33.4 10.6 Q34.4 17.2 34 23.2" fill="none" stroke="#3D2B27" stroke-width="1.1" stroke-linecap="butt" opacity="0.22" />
+        <path d="M41 10.8 Q42.2 17.4 41.6 23.4" fill="none" stroke="#3D2B27" stroke-width="1.1" stroke-linecap="butt" opacity="0.22" />
+        <path d="M48.2 13.2 Q49.4 18.8 48.8 23.4" fill="none" stroke="#3D2B27" stroke-width="1.1" stroke-linecap="butt" opacity="0.22" />
+      </g>
+      <rect x="17.2" y="22.4" width="39.6" height="7.6" rx="2.6" fill="#32B8B8" stroke="#3D2B27" stroke-width="1.6" />
+      <path d="M24 24.8 V28.4 M31.2 24.8 V28.4 M38.4 24.8 V28.4 M45.6 24.8 V28.4 M52.6 24.8 V28.4" stroke="#3D2B27" stroke-width="1.05" stroke-linecap="round" opacity="0.28" />
+      <circle cx="37" cy="9.2" r="4.1" fill="#FFF8EE" stroke="#3D2B27" stroke-width="1.5" />
     </g>
     <g v-else-if="look.hat === 'bow'" transform="rotate(20 44 15)">
       <path

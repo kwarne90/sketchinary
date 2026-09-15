@@ -96,6 +96,16 @@ export function useGame() {
       if (prev && snapshot.roundIndex !== prev.roundIndex) {
         liveGuesses.value = [];
       }
+      if (
+        prev &&
+        snapshot.phase === "drawing" &&
+        prev.phase !== "drawing" &&
+        snapshot.you === snapshot.hostId
+      ) {
+        trackUmami("round_started", {
+          players: snapshot.players.filter((player) => player.connected).length,
+        });
+      }
       state.value = snapshot;
       error.value = null;
       liveGuesses.value = snapshot.guesses.slice(-12);
@@ -159,6 +169,7 @@ export function useGame() {
             reject(new Error(error.value));
             return;
           }
+          trackUmami("game_created");
           resolve(result.code);
         },
       );
@@ -180,6 +191,7 @@ export function useGame() {
             reject(new Error(result.error));
             return;
           }
+          trackUmami("player_joined");
           resolve();
         },
       );

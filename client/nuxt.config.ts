@@ -37,6 +37,16 @@ export default defineNuxtConfig({
           href: "https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap",
         },
       ],
+      script:
+        process.env.NODE_ENV === "production"
+          ? [
+              {
+                src: "https://cloud.umami.is/script.js",
+                defer: true,
+                "data-website-id": "2c9adedf-7403-4ede-b988-3846bb2595ed",
+              },
+            ]
+          : [],
     },
   },
   runtimeConfig: {
